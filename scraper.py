@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import requests
 import sqlite3
 import time
+import csv 
 
 class Scraper:
     """
@@ -13,38 +14,24 @@ class Scraper:
     """
     def __init__(self):
         """
-        Form the database connection and get ready to do the downloading
+        Create the CSV and get ready to download the data.
         """
-        self.con = sqlite3.connect("statsguru.db")
-        self.cur = self.con.cursor()
-        self.baseurl = "http://stats.espncricinfo.com/ci/engine/stats/index.html?class=1;page=%s;template=results;type=team;view=results"
-
-        self.create_database()
+        #self.baseurl = "http://stats.espncricinfo.com/ci/engine/stats/index.html?class=1;page=%s;template=results;type=team;view=results"
+        self.baseurl = "http://stats.espncricinfo.com/ci/engine/stats/index.html?class=1;orderby=start;page=%s;template=results;type=team;view=innings"
+        self.outfile = 'all_test_innings.csv'
+        self.headings = ['team','score','runs','overs','rpo','lead','innings','result','opposition','ground','start_date','all_out_flag','declared_flag']
+        self.create_csv()
         self.scrape_pages()
 
-    def create_database(self):
+    def create_csv(self):
         """
-        Create the results table (if it doesn't exist), then make sure it is clean and empty
+        Create the file and put in the headings.
         """
-        self.cur.execute("""
-        CREATE TABLE IF NOT EXISTS results(
-            team        VARCHAR,
-            result      VARCHAR,
-            margin      VARCHAR,
-            toss        VARCHAR,
-            bat         VARCHAR,
-            blank       VARCHAR,
-            opposition  VARCHAR,
-            ground      VARCHAR,
-            start_date  VARCHAR,
-            blank2      VARCHAR
-        );
-        """)
-        self.con.commit()
-        self.cur.execute("""
-            DELETE FROM results;
-        """)
-        self.con.commit()
+
+        with open(self.outfile, 'w') as f:
+            writer = csv.writer(f)
+            writer.writerow(self.headings)
+
 
     def scrape_pages(self):
         """
@@ -57,45 +44,64 @@ class Scraper:
         # This lets us know if we should continue to loop
         more_results = self.parse_page()
         while more_results:
-            print "Scraping page %s" % index
+            print(f"Scraping page {index}")
             index += 1
             self.getpage(index)
             more_results = self.parse_page()
             # put a sleep in there so we don't hammer the cricinfo site too much
             time.sleep(1)
+        print('All done!')
 
     def getpage(self, index):
         """
         Returns the HTML of a page of results, given the index.
         """
         page = requests.get(self.baseurl % index).text
-        self.soup = BeautifulSoup(page)
+        self.soup = BeautifulSoup(page, features="html.parser")
 
     def parse_page(self):
         """
-        Writes the contents of the page to the sqlite database.
+        Writes the contents of the page to the CSV file.
         """
         for table in self.soup.findAll("table", class_ = "engineTable"):
             # There are a few table.engineTable in the page. We want the one that has the match
             # results caption
-            if table.find("caption", text="Match results") is not None:
+            if table.find("caption", text="Innings by innings list") is not None:
                 rows = table.findAll("tr", class_ = "data1")
                 for row in rows:
-                    values = [i.text
-                              for i in row.findAll("td")]
+                    values = [i.text for i in row.findAll("td")]
+                    
                     # if the only result in the table says "No records...", this means that we're
                     # at a table with no results. We've queried too many tables, so just return
                     # False
                     if values[0] == u'No records available to match this query':
                         return False
+                    # filter out all the empty string values
+                    values = [x for x in values if x != '']
+                    score = values[1]
+                    
+                    # the runs are the number before the /, if it exists
+                    runs = score.split('/')[0]
+                    if runs == 'DNB':
+                        runs = 0
+                    values.insert(2, runs)
 
-                    self.cur.execute("""
-                    INSERT INTO results VALUES(
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                    )
-                    """, values)
+                    # add an all-out flag, default is yes.
+                    all_out_flag = 1
+                    if '/' in score or score == 'DNB':
+                        all_out_flag = 0
+                    values.append(all_out_flag)
 
-                self.con.commit()
+                    # add declared flag, default no
+                    declared_flag = 0
+                    if score[-1] == 'd':
+                        declared_flag = 1
+                    values.append(declared_flag)
+
+                    with open('all_test_innings.csv', 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(values)
+
                 # Return true to say that this page was parsed correctly
                 return True
 
