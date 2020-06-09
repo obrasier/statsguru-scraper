@@ -19,7 +19,7 @@ class Scraper:
         #self.baseurl = "http://stats.espncricinfo.com/ci/engine/stats/index.html?class=1;page=%s;template=results;type=team;view=results"
         self.baseurl = "http://stats.espncricinfo.com/ci/engine/stats/index.html?class=1;orderby=start;page=%s;template=results;type=team;view=innings"
         self.outfile = 'all_test_innings.csv'
-        self.headings = ['team','score','runs','overs','rpo','lead','innings','result','opposition','ground','start_date','all_out_flag','declared_flag']
+        self.headings = ['team','score','runs','overs','balls_per_over','rpo','lead','innings','result','opposition','ground','start_date','all_out_flag','declared_flag']
         self.create_csv()
         self.scrape_pages()
 
@@ -79,12 +79,21 @@ class Scraper:
                     # filter out all the empty string values
                     values = [x for x in values if x != '']
                     score = values[1]
+
+                    overs_and_balls = values[2].split('x')
+                    values[2] = overs_and_balls[0]
                     
+                    balls_per_over = 6
+                    if len(overs_and_balls) == 2:
+                        balls_per_over = overs_and_balls[1]
+                    values.insert(3, balls_per_over)
+
                     # the runs are the number before the /, if it exists
                     runs = score.split('/')[0]
                     if runs == 'DNB':
                         runs = 0
                     values.insert(2, runs)
+
 
                     # add an all-out flag, default is yes.
                     all_out_flag = 1
