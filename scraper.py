@@ -1,10 +1,9 @@
 """
-Read the test match results from the statsguru site and save them in a SQLite database.
+Read the test match results from the statsguru site and save them in a CSV file.
 """
 
 from bs4 import BeautifulSoup
 import requests
-import sqlite3
 import time
 import csv 
 
@@ -27,7 +26,6 @@ class Scraper:
         """
         Create the file and put in the headings.
         """
-
         with open(self.outfile, 'w') as f:
             writer = csv.writer(f)
             writer.writerow(self.headings)
@@ -68,6 +66,7 @@ class Scraper:
             # results caption
             if table.find("caption", text="Innings by innings list") is not None:
                 rows = table.findAll("tr", class_ = "data1")
+                
                 for row in rows:
                     values = [i.text for i in row.findAll("td")]
                     
